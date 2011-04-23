@@ -1,0 +1,84 @@
+#!/usr/bin/env ruby
+# Simple yara-ruby script to extract files from raw blobs, aka file carving.
+# Much of the heavy lifting of extracting data is actually performed in the
+# yara rule file itself. This script just provides a skeleton framework for
+# a common scraping interface.
+#
+# == IMPORTANT SECURITY NOTE:
+# This script should not be used with untrusted yara rules as it will blindly
+# execute ruby code embedded in the rule if it is present. Always carefully
+# check the yara rules you are using to make sure they don't do anything
+# untrustworthy.
+#
+#    yara_utils - Ruby utilities using and for working with the yara library
+#    Eric Monti
+#    Copyright (C) 2011 Trustwave Holdings
+#
+#    This program is free software: you can redistribute it and/or modify it 
+#    under the terms of the GNU General Public License as published by the 
+#    Free Software Foundation, either version 3 of the License, or (at your
+#    option) any later version.
+#
+#    This program is distributed in the hope that it will be useful, but 
+#    WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+#    or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License
+#    for more details.
+#
+#    You should have received a copy of the GNU General Public License along
+#    with this program. If not, see <http://www.gnu.org/licenses/>.
+#
+$: << File.join(File.dirname(__FILE__), '..', 'lib')
+require 'yara'
+require 'pp'
+require 'pathname'
+
+outdir = Pathname.new('.')
+
+if ARGV.include?('-h') or (rules=ARGV.shift).nil? or ARGV.empty?
+  STDERR.puts "usage: #{File.basename $0} rules.yara file1 [file2 ...]"
+  exit 1
+end
+
+ctx = Yara::Rules.new
+ctx.compile_file(rules)
+
+# Some measure of scope containment when eval'ing rule-specific ruby code.
+# But don't be fooled, there's NO additional security here.
+def eval_rule_code(code,string,match,file)
+  begin
+    eval(code)
+  rescue
+    STDERR.puts $!
+    return nil
+  end
+end
+
+
+ARGV.each do |fname|
+  begin
+    file = File.new(fname, 'rb')
+    ctx.scan_file(fname).each do |match|
+      match.strings.each do |string|
+        desc, ext, code = match.meta.values_at('desc', 'ext', 'ruby')
+        outf = outdir.join(Pathname.new("#{fname}_%0.8x.#{ext || 'data'}" % string.offset).basename)
+        stroff = "0x#{string.offset.to_s(16)}"
+
+        desc ||= match.rule
+
+        unless code
+          STDERR.puts "[??] Found #{desc} in #{fname} at #{stroff} but no callback is defined. Skipping"
+          next
+        end
+
+        file.pos = string.offset
+        if data = eval_rule_code(code, string, match, file) and data.is_a?(String)
+          puts "[!!] Found #{desc} in #{fname} at 0x#{stroff} - writing to #{outf.to_s}"
+          outf.open('wb') {|out| out.write data }
+        end
+      end
+    end
+  ensure
+    file.close if file
+  end
+end
+
