@@ -39,9 +39,10 @@ rule pkcs8_private_key_information_syntax_standard
 rule gzip_file 
 {
   meta:
-    desc = "Embedded GZIP (decompressed)"
+    desc = "GZIP compressed file"
     ext  = "gz_decompressed"
-    ruby = "require 'zlib'; Zlib::GzipReader.new(file).read"
+    // extract and decompress the file - try to get original filename in header
+    ruby = "gz=Zlib::GzipReader.new(file); [gz.read, (gz.get_xtra_info[:file_name] rescue(nil))]"
 
   strings: $gzc = { 1f 8b }
   condition: $gzc
