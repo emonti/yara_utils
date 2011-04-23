@@ -29,7 +29,7 @@
 #
 $: << File.join(File.dirname(__FILE__), '..', 'lib')
 require 'yara'
-require 'pp'
+require 'rbkb'
 require 'pathname'
 
 outdir = Pathname.new('.')
@@ -78,7 +78,7 @@ ARGV.each do |fname|
         outf = outdir.join(Pathname.new("#{fname}_%0.8x.#{label}" % string.offset).basename)
 
         if data.is_a?(String)
-          puts "[!!] Found #{desc} in #{fname} at 0x#{stroff} - writing to #{outf.to_s}"
+          puts "[!!] Found #{desc} in #{fname} at #{stroff} - writing to #{outf.to_s}"
           outf.open('wb') {|out| out.write data }
         end
       end
