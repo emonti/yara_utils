@@ -1,9 +1,12 @@
+/* this file includes a set of example carver rules for yaracarva */
+
 rule flash_swf 
 {
   meta:
     desc = "SWF file"
     ext = "swf"
-    ruby = "hdr = file.read(8); magic, ver, len = hdr.unpack('A3CV') ; (hdr << file.read(len-8)) if ver <= 11"
+    ruby = "hdr = file.read(8); magic, ver, len = hdr.unpack('A3CV'); (hdr << file.read(len-8)) if ver <= 11"
+
   strings: 
     $uncompressed = "FWS"
     $compressed   = "CWS"
@@ -33,5 +36,24 @@ rule pkcs8_private_key_information_syntax_standard
 }
 
 
+rule gzip_file 
+{
+  meta:
+    desc = "Embedded GZIP (decompressed)"
+    ext  = "gz_decompressed"
+    ruby = "require 'zlib'; Zlib::GzipReader.new(file).read"
 
+  strings: $gzc = { 1f 8b }
+  condition: $gzc
+}
+
+rule pe_executable // position-indepentent serch for PE file headers
+{ 
+  meta: 
+    desc = "PE Executable"
+    ruby = "p = file.pos; mzh=file.read(0x40); x=file.read(mzh.unpack('V*')[-1] - 0x40); len=file.read(0x54).unpack('V*')[-1]; file.pos = p; file.read(len)"
+
+  strings:   $mz = "MZ"
+  condition: $mz and uint32( uint32(@mz[1] + 0x3C)) == 0x00004550
+} 
 
