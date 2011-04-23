@@ -48,7 +48,7 @@ def eval_rule_code(code,string,match,file)
   begin
     eval(code)
   rescue
-    STDERR.puts $!
+    STDERR.puts $! if $DEBUG
     return nil
   end
 end
@@ -59,8 +59,9 @@ ARGV.each do |fname|
     file = File.new(fname, 'rb')
     ctx.scan_file(fname).each do |match|
       match.strings.each do |string|
+        next if string.offset == 0 # skip matches at beginning of file
+
         desc, ext, code = match.meta.values_at('desc', 'ext', 'ruby')
-        outf = outdir.join(Pathname.new("#{fname}_%0.8x.#{ext || 'data'}" % string.offset).basename)
         stroff = "0x#{string.offset.to_s(16)}"
 
         desc ||= match.rule
@@ -71,7 +72,12 @@ ARGV.each do |fname|
         end
 
         file.pos = string.offset
-        if data = eval_rule_code(code, string, match, file) and data.is_a?(String)
+        data, matchfname = eval_rule_code(code, string, match, file)
+
+        label  = (matchfname || ext || 'data')
+        outf = outdir.join(Pathname.new("#{fname}_%0.8x.#{label}" % string.offset).basename)
+
+        if data.is_a?(String)
           puts "[!!] Found #{desc} in #{fname} at 0x#{stroff} - writing to #{outf.to_s}"
           outf.open('wb') {|out| out.write data }
         end
